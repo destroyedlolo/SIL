@@ -29,6 +29,7 @@
 # Executables
 *.out
 *.hex
+sil
 
 # Debug files
 *.dSYM/
