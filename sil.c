@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "storage.h"
+#include "tokenize.h"
 
 #include <stdio.h>
 #include <unistd.h>	/*getopts() */
@@ -18,9 +19,11 @@ bool verbose = false;
 bool debug = false;
 const char *binoutfile = NULL;
 
+const char *errstr = NULL;	/* last error message */
+
 struct storage mainstorage;
 
-int main(int ac, char **av){
+int main( int ac, char **av ){
 	int c;
 	
 	if(ac < 2){
@@ -61,6 +64,12 @@ int main(int ac, char **av){
 
 	if(!init_storage(&mainstorage, MAXCODE, MAXSTRING)){
 		fputs("*F* can't allocate storage\n", stderr);
+		exit(EXIT_FAILURE);
+	}
+
+	if(!tokenizeFile(&mainstorage, av[optind])){
+		fprintf(stderr, "*F* reading '%s' - %s\n", av[optind], errstr ? errstr : "unknow");
+		free_storage(&mainstorage);
 		exit(EXIT_FAILURE);
 	}
 }

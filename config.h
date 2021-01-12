@@ -17,4 +17,14 @@
 #define MAXCODE		32*1024		/* size of the tokenized storage */
 #define MAXSTRING	16*1024		/* size of the strings storage */
 
+
+/*****
+ * shared objects
+ *****/
+
+extern const char *errstr;
+/* extern bool verbose; */
+extern bool debug;
+/* const char *binoutfile; */
+
 #endif
