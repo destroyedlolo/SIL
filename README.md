@@ -5,7 +5,7 @@
 - one instruction per line
 - case sensitive
 - **#** - one line comment
-- **##** ... **##** - multi-lines (can be nested). Must be the 1st instruction of a line.
+- __#*__ ... __*#__ - multi-lines (can be nested). Must be the 1st instruction of a line.
 
 ### types
 
