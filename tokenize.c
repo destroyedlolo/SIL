@@ -29,15 +29,60 @@ struct reader {
 };
 
 
-/* shared reader initialisation */
+	/* shared reader initialisation */
 void init_reader(struct reader *r, struct storage *s){
 	r->storage = s;
 }
 
 
 /*****
- * Parser
+ * Identifier
  *****/
+
+struct Ident {
+	const char *start;
+	size_t len;
+};
+
+	/* check if a character is suitable for an identifier
+	 * valid are letters, '_' and digit but for the 1st one
+	 *
+	 *	-> c : character to test
+	 *	-> first : is the 1st character ?
+	 *
+	 *	<- true if suitable
+	 */
+bool isIdentChar( char c, bool first ){
+	return( isalpha(c) || c == '_' || (!first && isdigit(c)) );
+}
+
+bool Ident_get( struct Ident *ei, const char *s ){
+	ei->start = s;
+	ei->len = 0;
+
+	while( isIdentChar(s[ei->len], !ei->len) )
+		ei->len++;
+
+	return(!!ei->len);
+}
+
+const char *Ident_next( struct Ident *ei, bool strips ){
+	const char *s = ei->start + ei->len;
+	if(strips)
+		while( isspace(*s) ) s++;
+	return s;
+}
+
+	/* Debuging */
+void Ident_print( struct Ident *ei ){
+	if(!ei->len){
+		printf("(empty)");
+		return;
+	}
+
+	for(size_t i=0; i<ei->len; i++)
+		putchar( ei->start[i] );
+}
 
 bool parse( struct reader *reader ){
 	char l[MAXLINE];
@@ -45,7 +90,7 @@ bool parse( struct reader *reader ){
 	int nested_comment = 0;	/* level of nested comments */
 
 	while( !(r=reader->readline(reader, l, MAXLINE)) ){
-		char *s = l;
+		const char *s = l;
 
 		while( isspace(*s) ) s++;
 
@@ -70,7 +115,14 @@ bool parse( struct reader *reader ){
 		if(nested_comment)	/* inside comments */
 			continue;
 
-		puts(l);
+		struct Ident ident;
+		while( Ident_get(&ident, s) ){
+			s = Ident_next(&ident, true);
+
+			Ident_print(&ident);
+			printf(" (%ld -> '%s') - ", ident.len, s);
+		}
+		puts("");
 	}
 
 	if(nested_comment){
