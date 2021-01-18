@@ -12,7 +12,6 @@
 
 struct reader {
 	struct storage *storage;
-	size_t linenumber;
 
 		/* Reading from file */
 	FILE *file;
@@ -34,7 +33,6 @@ struct reader {
 	/* shared reader initialisation */
 void init_reader(struct reader *r, struct storage *s){
 	r->storage = s;
-	r->linenumber = 0;
 }
 
 
@@ -67,7 +65,9 @@ struct XToken {
 };
 
 #define FIRST_TYPE TOK_INT
-#define END_TYPE TOK_REF
+#define END_TYPE_VAR TOK_STRING	/* Last type applicable to variables */
+#define END_TYPE_FUNC TOK_VOID	/* Last type applicable to function */
+#define END_TYPE_ARG TOK_REF	/* Last type applicable to arguments */
 
 	/* Calculate hash code for tokens */
 void init_token(){
