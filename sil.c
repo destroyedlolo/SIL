@@ -62,13 +62,21 @@ int main( int ac, char **av ){
 		fprintf(stderr, "*I* reading sources from '%s'\n", av[optind]);
 	}
 
+		/* Initialize internal objects */
+	init_token();
+
+		/* let's go */
 	if(!init_storage(&mainstorage, MAXCODE, MAXSTRING)){
 		fputs("*F* can't allocate storage\n", stderr);
 		exit(EXIT_FAILURE);
 	}
 
-	if(!tokenizeFile(&mainstorage, av[optind])){
-		fprintf(stderr, "*F* reading '%s' - %s\n", av[optind], errstr ? errstr : "unknow");
+	size_t linenumber = -1;
+	if(!tokenizeFile(&mainstorage, av[optind],&linenumber)){
+		if(linenumber != -1)
+			fprintf(stderr, "*F* reading '%s:%lu' - %s\n", av[optind], linenumber, errstr ? errstr : "unknow");
+		else
+			fprintf(stderr, "*F* reading '%s' - %s\n", av[optind], errstr ? errstr : "unknow");
 		free_storage(&mainstorage);
 		exit(EXIT_FAILURE);
 	}

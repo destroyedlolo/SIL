@@ -3,6 +3,7 @@
  */
 
 #include "tokenize.h"
+#include "utilities.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +12,7 @@
 
 struct reader {
 	struct storage *storage;
+	size_t linenumber;
 
 		/* Reading from file */
 	FILE *file;
@@ -32,8 +34,46 @@ struct reader {
 	/* shared reader initialisation */
 void init_reader(struct reader *r, struct storage *s){
 	r->storage = s;
+	r->linenumber = 0;
 }
 
+
+/*****
+ * Tokens
+ *****/
+
+#define FIRST_TOKEN 128
+enum Token {
+	TOK_UNKNOWN = 0,
+	TOK_INT = FIRST_TOKEN,
+	TOK_SIGNED,
+	TOK_FLOAT,
+	TOK_STRING,
+	TOK_VOID,
+	TOK_REF,
+};
+
+struct XToken {
+	enum Token token;
+	const char *name;
+	hash_t h;
+} xtoken[] = {
+	{ TOK_INT, "int" },
+	{ TOK_SIGNED, "signed" },
+	{ TOK_FLOAT, "float" },
+	{ TOK_STRING, "string" },
+	{ TOK_VOID, "void" },
+	{ TOK_REF, "reference" },
+};
+
+#define FIRST_TYPE TOK_INT
+#define END_TYPE TOK_REF
+
+	/* Calculate hash code for tokens */
+void init_token(){
+	for(int i=0; i<sizeof(xtoken)/sizeof(xtoken[1]); i++)
+		xtoken[i].h = hash( xtoken[i].name, -1 );
+}
 
 /*****
  * Identifier
@@ -42,6 +82,8 @@ void init_reader(struct reader *r, struct storage *s){
 struct Ident {
 	const char *start;
 	size_t len;
+
+	enum Token token;
 };
 
 	/* check if a character is suitable for an identifier
@@ -59,6 +101,7 @@ bool isIdentChar( char c, bool first ){
 bool Ident_get( struct Ident *ei, const char *s ){
 	ei->start = s;
 	ei->len = 0;
+	ei->token = TOK_UNKNOWN;
 
 	while( isIdentChar(s[ei->len], !ei->len) )
 		ei->len++;
@@ -84,13 +127,14 @@ void Ident_print( struct Ident *ei ){
 		putchar( ei->start[i] );
 }
 
-bool parse( struct reader *reader ){
+bool parse( struct reader *reader, size_t *linenumber ){
 	char l[MAXLINE];
 	enum resReading r;
 	int nested_comment = 0;	/* level of nested comments */
 
 	while( !(r=reader->readline(reader, l, MAXLINE)) ){
 		const char *s = l;
+		(*linenumber)++;
 
 		while( isspace(*s) ) s++;
 
@@ -115,14 +159,30 @@ bool parse( struct reader *reader ){
 		if(nested_comment)	/* inside comments */
 			continue;
 
+			/*
+			 * Parse a line
+			 */
+		printf("\n%ld : ", *linenumber);
 		struct Ident ident;
+
+				/* Get the 1st ident.
+				 * it can be :
+				 * 	- type -> variable or function definition
+				 * 	- already defined function name -> function call
+				 * 	- already defined variable -> calculation
+				 * 	- module identifier -> to be done
+				 */
+		if( !Ident_get(&ident, s) )
+			return false;
+
+/*
 		while( Ident_get(&ident, s) ){
 			s = Ident_next(&ident, true);
 
 			Ident_print(&ident);
 			printf(" (%ld -> '%s') - ", ident.len, s);
 		}
-		puts("");
+*/
 	}
 
 	if(nested_comment){
@@ -152,8 +212,9 @@ enum resReading getLineFromFile( struct reader *reader, char *line, size_t max )
 	return OK;
 }
 
-bool tokenizeFile( struct storage *storage, const char *file ){
+bool tokenizeFile( struct storage *storage, const char *file, size_t *linenuber ){
 	struct reader rdr;
+	*linenuber = 0;
 
 	init_reader( &rdr, storage );
 	rdr.readline = getLineFromFile;
@@ -162,6 +223,6 @@ bool tokenizeFile( struct storage *storage, const char *file ){
 		return false;
 	}
 
-	return parse(&rdr);
+	return parse(&rdr, linenuber);
 }
 
