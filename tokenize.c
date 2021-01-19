@@ -83,6 +83,7 @@ struct Ident {
 	const char *start;
 	size_t len;
 
+	hash_t h;
 	enum Token token;
 };
 
@@ -98,6 +99,11 @@ bool isIdentChar( char c, bool first ){
 	return( isalpha(c) || c == '_' || (!first && isdigit(c)) );
 }
 
+	/* Get the identifier
+	 *	-> struct Ident *ei : identifier structure
+	 *	-> const char *s : starting of the identifier
+	 *	<- can be an identifier (false if doesn't point to a valid identifier name)
+	 */
 bool Ident_get( struct Ident *ei, const char *s ){
 	ei->start = s;
 	ei->len = 0;
@@ -109,11 +115,37 @@ bool Ident_get( struct Ident *ei, const char *s ){
 	return(!!ei->len);
 }
 
+
+	/* Return the point to the next element
+	 *	-> struct Ident *ei : identifier structure
+	 *	-> bool strips : remove space as well
+	 *	<- const char * : next element of the string
+	 */
 const char *Ident_next( struct Ident *ei, bool strips ){
 	const char *s = ei->start + ei->len;
 	if(strips)
 		while( isspace(*s) ) s++;
 	return s;
+}
+
+	/* Find out token value
+	 *	-> struct Ident *ei : identifier structure
+	 *	<- enum Token : token value for the current id
+	 */
+enum Token Ident_getToken( struct Ident *ei ){
+	ei->h = hash( ei->start, ei->len );
+
+	for(int i=0; i<sizeof(xtoken)/sizeof(xtoken[1]); i++){
+printf(" ** i:%x ei:%x tok:%x (%s)\n", i, ei->h, xtoken[i].h, xtoken[i].name);
+		if( ei->h == xtoken[i].h ){	/* Hash code is matching */
+			if( !strncmp(ei->start, xtoken[i].name, ei->len) ){	/* string's matching as well */
+				ei->token = xtoken[i].token;
+				break;
+			}
+		}
+	}
+
+	return(ei->token);
 }
 
 	/* Debuging */
@@ -175,6 +207,10 @@ bool parse( struct reader *reader, size_t *linenumber ){
 		if( !Ident_get(&ident, s) )
 			return false;
 
+		Ident_print(&ident);
+		Ident_getToken(&ident);
+
+		printf(" (%ld -> '%s' h:%x, tok:%02x) - ", ident.len, s, ident.h, ident.token);
 /*
 		while( Ident_get(&ident, s) ){
 			s = Ident_next(&ident, true);
