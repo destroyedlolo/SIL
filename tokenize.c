@@ -9,6 +9,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <stdint.h>
 
 struct reader {
 	struct storage *storage;
@@ -38,11 +39,15 @@ void init_reader(struct reader *r, struct storage *s){
 
 /*****
  * Tokens
+ *
+ * Notez-bien : parsing through function Ident_getToken() depends deeply
+ * 	on types' ordering.
+ * 	Changing anything on tokens implies to check Ident_getToken()
  *****/
 
 #define FIRST_TOKEN 128
 enum Token {
-	TOK_UNKNOWN = 0,
+	TOK_UNKNOWN = 0,		/* MUST be 0 */
 	TOK_INT = FIRST_TOKEN,
 	TOK_SIGNED,
 	TOK_FLOAT,
@@ -69,6 +74,16 @@ struct XToken {
 #define END_TYPE_FUNC TOK_VOID	/* Last type applicable to function */
 #define END_TYPE_ARG TOK_REF	/* Last type applicable to arguments */
 
+	/* token kind (bits) */
+#define TOKK_UNKNOWN	(0b00000000)
+#define TOKK_VTYPE		(0b00000001)	/* type applicable to variable */
+#define TOKK_FTYPE		(0b00000010)	/* type applicable only to a function */
+#define TOKK_ATYPE		(0b00000100)	/* type applicable only to an argument */
+#define TOKK_DTYPE		(TOKK_VTYPE | TOKK_FTYPE)				/* type to enter in a definition */
+#define TOKK_TYPE		(TOKK_VTYPE | TOKK_FTYPE | TOKK_ATYPE)	/* all kind of types */
+
+typedef uint16_t tokenkind_t;
+
 	/* Calculate hash code for tokens */
 void init_token(){
 	for(int i=0; i<sizeof(xtoken)/sizeof(xtoken[1]); i++)
@@ -85,6 +100,7 @@ struct Ident {
 
 	hash_t h;
 	enum Token token;
+	tokenkind_t kind;
 };
 
 	/* check if a character is suitable for an identifier
@@ -131,12 +147,14 @@ const char *Ident_next( struct Ident *ei, bool strips ){
 	/* Find out token value
 	 *	-> struct Ident *ei : identifier structure
 	 *	<- enum Token : token value for the current id
+	 *
+	 * NOTEZ-BIEN : depends deeply on type ordering, 
+	 * see XToken's comment
 	 */
 enum Token Ident_getToken( struct Ident *ei ){
 	ei->h = hash( ei->start, ei->len );
 
 	for(int i=0; i<sizeof(xtoken)/sizeof(xtoken[1]); i++){
-printf(" ** i:%x ei:%x tok:%x (%s)\n", i, ei->h, xtoken[i].h, xtoken[i].name);
 		if( ei->h == xtoken[i].h ){	/* Hash code is matching */
 			if( !strncmp(ei->start, xtoken[i].name, ei->len) ){	/* string's matching as well */
 				ei->token = xtoken[i].token;
@@ -145,7 +163,23 @@ printf(" ** i:%x ei:%x tok:%x (%s)\n", i, ei->h, xtoken[i].h, xtoken[i].name);
 		}
 	}
 
+	ei->kind = 0;
+	if( !ei->token )
+		;
+	else if( ei->token <= END_TYPE_VAR )			/* Variable only */
+		ei->kind |= TOKK_VTYPE;
+	else if( ei->token <= END_TYPE_FUNC )	/* applicable to a function */
+		ei->kind |= TOKK_VTYPE | TOKK_FTYPE;
+	else if( ei->token > END_TYPE_FUNC && ei->token <= END_TYPE_ARG )	/* applicable only to arguments */
+		ei->kind |= TOKK_VTYPE | TOKK_ATYPE;
+	
 	return(ei->token);
+}
+
+	/* Return flags about ident kind
+	 */
+tokenkind_t Ident_getKind( struct Ident *ei ){
+	return(ei->kind);
 }
 
 	/* Debuging */
@@ -159,28 +193,32 @@ void Ident_print( struct Ident *ei ){
 		putchar( ei->start[i] );
 }
 
+	/* parse the entire content from a reader
+	 * -> struct reader *reader : reader to use to get source
+	 * -> size_t * linenumber : pointer to the line number counter
+	 */
 bool parse( struct reader *reader, size_t *linenumber ){
 	char l[MAXLINE];
 	enum resReading r;
 	int nested_comment = 0;	/* level of nested comments */
 
-	while( !(r=reader->readline(reader, l, MAXLINE)) ){
-		const char *s = l;
+	while( !(r=reader->readline(reader, l, MAXLINE)) ){	/* loop on lines */
+		const char *s = l;	/* Where are we in this line parsing */
 		(*linenumber)++;
 
-		while( isspace(*s) ) s++;
+		while( isspace(*s) ) s++;	/* skip leading spaces */
 
 				/* it's safe to check next character as in worst case,
 				 * at the end of the buffer, the last one is provisioned for \0
 				 */
 		if(!*s)
 			continue;
-		if(*s == '#'){
+		if(*s == '#'){	/* Entering in comments */
 			if(s[1] == '*')	/* Multi line comment */
 				nested_comment++;
 			continue;	/* remaining of the line can be ignored */
 		}
-		if(nested_comment && *s == '*'){
+		if(nested_comment && *s == '*'){	/* End of multi-lines comment ? */
 			if(s[1] == '#'){
 				nested_comment--;
 				continue;	/*TODO : check if the remaining is empty*/
@@ -188,29 +226,29 @@ bool parse( struct reader *reader, size_t *linenumber ){
 			/* otherwise, let's continue with the parsing */
 		}
 
-		if(nested_comment)	/* inside comments */
+		if(nested_comment)	/* inside multi-lines comments : skip to next line*/
 			continue;
 
 			/*
 			 * Parse a line
 			 */
-		printf("\n%ld : ", *linenumber);
-		struct Ident ident;
+printf("\n%ld : ", *linenumber);
+		struct Ident head;	/* first item of this line */
 
-				/* Get the 1st ident.
+				/* Get the 1st item.
 				 * it can be :
 				 * 	- type -> variable or function definition
 				 * 	- already defined function name -> function call
 				 * 	- already defined variable -> calculation
 				 * 	- module identifier -> to be done
 				 */
-		if( !Ident_get(&ident, s) )
+		if( !Ident_get(&head, s) )
 			return false;
 
-		Ident_print(&ident);
-		Ident_getToken(&ident);
+		Ident_getToken(&head);	/* find out the token id */
 
-		printf(" (%ld -> '%s' h:%x, tok:%02x) - ", ident.len, s, ident.h, ident.token);
+Ident_print(&head);
+printf(" (%ld -> '%s' h:%x, tok:%02x [%02x]) - ", head.len, s, head.h, head.token, Ident_getKind(&head) );
 /*
 		while( Ident_get(&ident, s) ){
 			s = Ident_next(&ident, true);
