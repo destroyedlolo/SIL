@@ -183,14 +183,16 @@ tokenkind_t Ident_getKind( struct Ident *ei ){
 }
 
 	/* Debuging */
-void Ident_print( struct Ident *ei ){
+void Ident_print( struct Ident * ei ){
 	if(!ei->len){
 		printf("(empty)");
 		return;
 	}
 
+	putchar('\'');
 	for(size_t i=0; i<ei->len; i++)
 		putchar( ei->start[i] );
+	putchar('\'');
 }
 
 	/* parse the entire content from a reader
@@ -244,11 +246,31 @@ printf("\n%ld : ", *linenumber);
 				 */
 		if( !Ident_get(&head, s) )
 			return false;
-
 		Ident_getToken(&head);	/* find out the token id */
 
 Ident_print(&head);
 printf(" (%ld -> '%s' h:%x, tok:%02x [%02x]) - ", head.len, s, head.h, head.token, Ident_getKind(&head) );
+fflush(stdout);
+
+		if( Ident_getKind(&head) & TOKK_DTYPE ){	/* variable or function definition */
+			struct Ident name;
+			if( !Ident_get(&name, Ident_next(&head, true)) ){
+				errstr="Expecting identifier after starting a definition with a type";
+				return false;
+			}
+			Ident_getToken(&name);
+
+Ident_print(&name);
+printf(" (h:%x, tok:%02x [%02x]) - ", name.h, name.token, Ident_getKind(&name) );
+fflush(stdout);
+
+			if( Ident_getKind(&name) != TOKK_UNKNOWN ){
+				errstr="Function or variable identifier mustn't be a keywork";
+				return false;
+			}
+		}
+/* TOTO : code other can definition */
+
 /*
 		while( Ident_get(&ident, s) ){
 			s = Ident_next(&ident, true);
